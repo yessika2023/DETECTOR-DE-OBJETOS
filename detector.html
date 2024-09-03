@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detección de Objetos en Tiempo Real</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        video {
+            border: 2px solid #ccc;
+            width: 80%;
+            max-width: 600px;
+            height: auto;
+            margin-bottom: 10px;
+        }
+        canvas {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 80%;
+            max-width: 600px;
+            height: auto;
+            margin-bottom: 10px;
+        }
+        .detected-objects {
+            margin-top: 20px;
+            background: white;
+            border-radius: 5px;
+            padding: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            max-width: 600px;
+        }
+        .object-item {
+            margin: 5px 0;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Detección de Objetos en Tiempo Real</h1>
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+    <div class="detected-objects" id="detected-objects"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const detectedObjectsDiv = document.getElementById('detected-objects');
+        let model;
+        let detectedClasses = {};
+
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: true,
+            });
+            video.srcObject = stream;
+
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => {
+                    resolve(video);
+                };
+            });
+        }
+
+        async function loadModel() {
+            model = await cocoSsd.load();
+        }
+
+        async function detectObjects() {
+            const predictions = await model.detect(video);
+
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            predictions.forEach(prediction => {
+                const [x, y, width, height] = prediction.bbox;
+                ctx.beginPath();
+                ctx.rect(x, y, width, height);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'red';
+                ctx.fillStyle = 'red';
+                ctx.stroke();
+                ctx.fillText(`${prediction.class} (${Math.round(prediction.score * 100)}%)`, x, y > 10 ? y - 5 : 10);
+
+                // Manejo de objetos únicos
+                if (!detectedClasses[prediction.class]) {
+                    const now = new Date().toLocaleTimeString();
+                    detectedClasses[prediction.class] = now;
+                    const objectItem = document.createElement('div');
+                    objectItem.className = 'object-item';
+                    objectItem.textContent = `${prediction.class} detectado a las ${now}`;
+                    detectedObjectsDiv.appendChild(objectItem);
+                }
+            });
+        }
+
+        async function main() {
+            await loadModel();
+            await setupCamera();
+            video.play();
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            // Frecuencia de detección de 2 FPS
+            setInterval(() => {
+                detectObjects();
+            }, 500); // cada 500ms
+        }
+
+        // Manejo de errores
+        async function init() {
+            try {
+                await main();
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error al acceder a la cámara o cargar el modelo. Asegúrate de que la cámara esté disponible y que el sitio esté servido mediante HTTPS.');
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
